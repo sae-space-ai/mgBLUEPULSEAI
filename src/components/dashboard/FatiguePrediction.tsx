@@ -1,5 +1,4 @@
 import { useAppStore } from '../../store/useAppStore';
-import { getFatiguePrediction, generateFatigueEvolution } from '../../lib/fatigueModel';
 import {
   LineChart,
   Line,
@@ -11,25 +10,55 @@ import {
   BarChart,
   Bar,
   Cell,
+  AreaChart,
+  Area,
 } from 'recharts';
 import { cn } from '../../lib/utils';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Brain } from 'lucide-react';
 
 export default function FatiguePrediction() {
-  const { components, settings } = useAppStore();
+  const { components, predictions, settings } = useAppStore();
 
-  const predictions = components.map(c => getFatiguePrediction(c));
-  const evolutionData = generateFatigueEvolution(components[0], 12);
+  const predictionArray = Array.from(predictions.values());
+  
+  // Use AI predictions if available
+  const avgMinerDamage = predictionArray.length > 0
+    ? predictionArray.reduce((s, p) => s + p.fatigue.minerDamage, 0) / predictionArray.length
+    : components.reduce((s, c) => s + c.fatigueAccumulation, 0) / components.length;
+  
+  const avgWeibullProb = predictionArray.length > 0
+    ? predictionArray.reduce((s, p) => s + p.failure.weibullProbability, 0) / predictionArray.length
+    : components.reduce((s, c) => s + c.failureProbability, 0) / components.length;
+  
+  const avgRemainingLife = predictionArray.length > 0
+    ? predictionArray.reduce((s, p) => s + p.failure.remainingUsefulLife, 0) / predictionArray.length
+    : 15;
 
-  const avgMinerDamage = predictions.reduce((s, p) => s + p.minerDamage, 0) / predictions.length;
-  const avgWeibullProb = predictions.reduce((s, p) => s + p.weibullProbability, 0) / predictions.length;
-  const avgRemainingLife = predictions.reduce((s, p) => s + p.estimatedRemainingLife, 0) / predictions.length;
+  // Evolution data from first component prediction
+  const evolutionData = predictionArray.length > 0
+    ? predictionArray[0].fatigue.evolution.map(e => ({
+        month: `M+${e.month}`,
+        damage: e.damage * 100,
+        rate: e.rate * 100,
+      }))
+    : [];
 
-  const barData = components.map(c => ({
-    name: c.name.split(' ').slice(-1)[0],
-    damage: c.fatigueAccumulation * 100,
-    status: c.status,
-  }));
+  // Bar data for components
+  const barData = predictionArray.length > 0
+    ? predictionArray.map(p => ({
+        name: p.componentId.replace('mooring-', 'M').replace('anchor-', 'A'),
+        damage: p.fatigue.minerDamage * 100,
+        failure: p.failure.weibullProbability * 100,
+        risk: p.risk.score * 100,
+        status: p.risk.level === 'critical' ? 'critical' : p.risk.level === 'high' ? 'warning' : 'optimal',
+      }))
+    : components.map(c => ({
+        name: c.id.replace('mooring-', 'M').replace('anchor-', 'A'),
+        damage: c.fatigueAccumulation * 100,
+        failure: c.failureProbability * 100,
+        risk: c.failureProbability * 100,
+        status: c.status,
+      }));
 
   const getBarColor = (status: string) => {
     switch (status) {
@@ -45,7 +74,10 @@ export default function FatiguePrediction() {
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-4">
-          <p className="text-xs text-slate-400">Avg. Miner Damage</p>
+          <div className="flex items-center gap-1 mb-1">
+            <p className="text-xs text-slate-400">Avg. Miner Damage</p>
+            <Brain className="w-3 h-3 text-purple-400" />
+          </div>
           <p className={cn('text-xl font-bold mt-1', avgMinerDamage > 0.6 ? 'text-red-400' : avgMinerDamage > 0.3 ? 'text-amber-400' : 'text-emerald-400')}>
             {(avgMinerDamage * 100).toFixed(1)}%
           </p>
@@ -55,11 +87,14 @@ export default function FatiguePrediction() {
               style={{ width: `${avgMinerDamage * 100}%` }}
             />
           </div>
-          <p className="text-[10px] text-slate-500 mt-1">D = Σ(ni/Ni) - S-N curve: N=(S₀/S)^m</p>
+          <p className="text-[10px] text-slate-500 mt-1">D = Σ(ni/Ni) | S-N: N=(S₀/S)^m, S₀=100MPa, m=3</p>
         </div>
 
         <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-4">
-          <p className="text-xs text-slate-400">Avg. Failure Probability</p>
+          <div className="flex items-center gap-1 mb-1">
+            <p className="text-xs text-slate-400">Avg. Failure Probability</p>
+            <Brain className="w-3 h-3 text-purple-400" />
+          </div>
           <p className={cn('text-xl font-bold mt-1', avgWeibullProb > 0.5 ? 'text-red-400' : avgWeibullProb > 0.25 ? 'text-amber-400' : 'text-emerald-400')}>
             {(avgWeibullProb * 100).toFixed(1)}%
           </p>
@@ -73,7 +108,10 @@ export default function FatiguePrediction() {
         </div>
 
         <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-4">
-          <p className="text-xs text-slate-400">Avg. Remaining Life</p>
+          <div className="flex items-center gap-1 mb-1">
+            <p className="text-xs text-slate-400">Avg. Remaining Life</p>
+            <Brain className="w-3 h-3 text-purple-400" />
+          </div>
           <p className="text-xl font-bold mt-1 text-blue-400">
             {avgRemainingLife.toFixed(1)} yr
           </p>
@@ -91,65 +129,98 @@ export default function FatiguePrediction() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Fatigue evolution */}
         <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-4">
-          <h4 className="text-xs font-semibold text-white mb-3">Fatigue Evolution (Last 12 Months)</h4>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={evolutionData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#64748b' }} />
-              <YAxis tick={{ fontSize: 9, fill: '#64748b' }} domain={[0, 1]} />
-              <Tooltip
-                contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '11px' }}
-              />
-              <Line type="monotone" dataKey="damage" stroke="#f59e0b" strokeWidth={2} dot={false} name="Miner Damage" />
-              <Line type="monotone" dataKey="probability" stroke="#ef4444" strokeWidth={2} dot={false} name="Failure Prob." />
-            </LineChart>
-          </ResponsiveContainer>
+          <div className="flex items-center gap-2 mb-3">
+            <h4 className="text-xs font-semibold text-white">AI Fatigue Evolution Prediction</h4>
+            <Brain className="w-3 h-3 text-purple-400" />
+          </div>
+          {evolutionData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={evolutionData}>
+                <defs>
+                  <linearGradient id="damageGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#64748b' }} />
+                <YAxis tick={{ fontSize: 9, fill: '#64748b' }} domain={[0, 100]} />
+                <Tooltip
+                  contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '11px' }}
+                />
+                <Area type="monotone" dataKey="damage" stroke="#f59e0b" fill="url(#damageGradient)" strokeWidth={2} name="Damage %" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-xs text-slate-500">
+              Waiting for AI predictions...
+            </div>
+          )}
         </div>
 
         {/* Component comparison */}
         <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-4">
-          <h4 className="text-xs font-semibold text-white mb-3">Fatigue by Component (%)</h4>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={barData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="name" tick={{ fontSize: 8, fill: '#64748b' }} />
-              <YAxis tick={{ fontSize: 9, fill: '#64748b' }} domain={[0, 100]} />
-              <Tooltip
-                contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '11px' }}
-              />
-              <Bar dataKey="damage" radius={[4, 4, 0, 0]}>
-                {barData.map((entry, index) => (
-                  <Cell key={index} fill={getBarColor(entry.status)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="flex items-center gap-2 mb-3">
+            <h4 className="text-xs font-semibold text-white">AI Risk by Component</h4>
+            <Brain className="w-3 h-3 text-purple-400" />
+          </div>
+          {barData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={barData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="name" tick={{ fontSize: 8, fill: '#64748b' }} />
+                <YAxis tick={{ fontSize: 9, fill: '#64748b' }} domain={[0, 100]} />
+                <Tooltip
+                  contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '11px' }}
+                />
+                <Bar dataKey="risk" radius={[4, 4, 0, 0]} name="Risk %">
+                  {barData.map((entry, index) => (
+                    <Cell key={index} fill={getBarColor(entry.status)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-xs text-slate-500">
+              Waiting for AI predictions...
+            </div>
+          )}
         </div>
       </div>
 
       {/* Trend indicators */}
       <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-4">
-        <h4 className="text-xs font-semibold text-white mb-3">Component Trends</h4>
+        <div className="flex items-center gap-2 mb-3">
+          <h4 className="text-xs font-semibold text-white">AI Component Trends & Predictions</h4>
+          <Brain className="w-3 h-3 text-purple-400" />
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-          {predictions.map((pred) => {
-            const comp = components.find(c => c.id === pred.componentId);
-            return (
-              <div key={pred.componentId} className="bg-slate-800/50 rounded-lg p-2 border border-slate-700/30">
-                <p className="text-[10px] text-slate-400 truncate">{comp?.name}</p>
-                <div className="flex items-center gap-1 mt-1">
-                  {pred.trend === 'degrading' && <TrendingDown className="w-3 h-3 text-red-400" />}
-                  {pred.trend === 'improving' && <TrendingUp className="w-3 h-3 text-emerald-400" />}
-                  {pred.trend === 'stable' && <Minus className="w-3 h-3 text-slate-400" />}
-                  <span className={cn('text-[10px] font-medium', 
-                    pred.trend === 'degrading' ? 'text-red-400' : pred.trend === 'improving' ? 'text-emerald-400' : 'text-slate-400'
-                  )}>
-                    {pred.trend}
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-500 mt-0.5">Life: {pred.estimatedRemainingLife.toFixed(1)}yr</p>
+          {predictionArray.length > 0 ? predictionArray.map((pred) => (
+            <div key={pred.componentId} className="bg-slate-800/50 rounded-lg p-2 border border-slate-700/30">
+              <p className="text-[10px] text-slate-400 truncate">{pred.componentId.replace('mooring-', 'M-').replace('anchor-', 'A-')}</p>
+              <div className="flex items-center gap-1 mt-1">
+                {pred.fatigue.trend === 'degrading' && <TrendingDown className="w-3 h-3 text-red-400" />}
+                {pred.fatigue.trend === 'improving' && <TrendingUp className="w-3 h-3 text-emerald-400" />}
+                {pred.fatigue.trend === 'stable' && <Minus className="w-3 h-3 text-slate-400" />}
+                <span className={cn('text-[10px] font-medium', 
+                  pred.fatigue.trend === 'degrading' ? 'text-red-400' : pred.fatigue.trend === 'improving' ? 'text-emerald-400' : 'text-slate-400'
+                )}>
+                  {pred.fatigue.trend}
+                </span>
               </div>
-            );
-          })}
+              <p className="text-[10px] text-slate-500 mt-0.5">RUL: {pred.failure.remainingUsefulLife.toFixed(1)}yr</p>
+              <p className="text-[10px] text-slate-500">Risk: {(pred.risk.score * 100).toFixed(0)}%</p>
+            </div>
+          )) : components.map((comp) => (
+            <div key={comp.id} className="bg-slate-800/50 rounded-lg p-2 border border-slate-700/30">
+              <p className="text-[10px] text-slate-400 truncate">{comp.id.replace('mooring-', 'M-').replace('anchor-', 'A-')}</p>
+              <div className="flex items-center gap-1 mt-1">
+                <Minus className="w-3 h-3 text-slate-400" />
+                <span className="text-[10px] font-medium text-slate-400">analyzing</span>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-0.5">Loading...</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>
