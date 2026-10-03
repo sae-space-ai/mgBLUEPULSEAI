@@ -6,16 +6,11 @@ import Components from './pages/Components';
 import Alerts from './pages/Alerts';
 import Reports from './pages/Reports';
 import SettingsPage from './pages/Settings';
-import Login from './pages/Login';
 import { cn } from './lib/utils';
 
 function App() {
-  const { isAuthenticated, sidebarOpen } = useAppStore();
+  const { sidebarOpen } = useAppStore();
   const [currentPage, setCurrentPage] = useState('dashboard');
-
-  if (!isAuthenticated) {
-    return <Login />;
-  }
 
   const renderPage = () => {
     switch (currentPage) {

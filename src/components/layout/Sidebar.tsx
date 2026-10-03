@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   FileText,
   Settings,
-  LogOut,
   Waves,
   ChevronLeft,
   ChevronRight,
@@ -17,7 +16,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
-  const { user, logout, sidebarOpen, toggleSidebar } = useAppStore();
+  const { sidebarOpen, toggleSidebar } = useAppStore();
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -70,26 +69,14 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         })}
       </nav>
 
-      {/* User section */}
+      {/* Info section */}
       <div className="p-3 border-t border-slate-800">
-        {sidebarOpen && user && (
-          <div className="flex items-center gap-2 mb-2 px-2">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-xs font-bold">
-              {user.name.charAt(0)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate">{user.name}</p>
-              <p className="text-[10px] text-slate-400">{user.role}</p>
-            </div>
+        {sidebarOpen && (
+          <div className="px-2 py-1">
+            <p className="text-[10px] text-slate-500">I3FLOAT Open Challenge 1.2.3</p>
+            <p className="text-[10px] text-slate-600">TRL 6-7 Prototype</p>
           </div>
         )}
-        <button
-          onClick={logout}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-400/5 transition-all text-sm"
-        >
-          <LogOut className="w-5 h-5 flex-shrink-0" />
-          {sidebarOpen && <span>Logout</span>}
-        </button>
       </div>
 
       {/* Toggle button */}
