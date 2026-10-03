@@ -51,9 +51,3 @@ export interface AppSettings {
   currentSpeed: number;
   darkMode: boolean;
 }
-
-export interface User {
-  email: string;
-  role: 'admin' | 'operator';
-  name: string;
-}
