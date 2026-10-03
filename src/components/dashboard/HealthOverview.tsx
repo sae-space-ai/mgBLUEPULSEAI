@@ -1,17 +1,20 @@
 import { useAppStore } from '../../store/useAppStore';
-import { Activity, AlertTriangle, Clock, Shield, TrendingDown, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, Clock, Shield, TrendingDown, Zap, Brain } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { calculateHealthScore } from '../../lib/anomalyDetection';
 
 export default function HealthOverview() {
-  const { components, alerts } = useAppStore();
+  const { components, alerts, systemKPIs, predictions } = useAppStore();
 
-  const avgFatigue = components.reduce((s, c) => s + c.fatigueAccumulation, 0) / components.length;
-  const avgFailureProb = components.reduce((s, c) => s + c.failureProbability, 0) / components.length;
+  // Use AI KPIs if available, otherwise calculate from raw data
+  const healthScore = systemKPIs?.overallHealth ?? 75;
+  const avgFatigue = predictions.size > 0
+    ? Array.from(predictions.values()).reduce((s, p) => s + p.fatigue.minerDamage, 0) / predictions.size
+    : components.reduce((s, c) => s + c.fatigueAccumulation, 0) / components.length;
+  const avgFailureProb = predictions.size > 0
+    ? Array.from(predictions.values()).reduce((s, p) => s + p.failure.weibullProbability, 0) / predictions.size
+    : components.reduce((s, c) => s + c.failureProbability, 0) / components.length;
   const activeAlerts = alerts.filter(a => !a.acknowledged).length;
-  const healthScore = calculateHealthScore(avgFatigue, avgFailureProb, activeAlerts, components.length);
-
-  const criticalCount = components.filter(c => c.status === 'critical').length;
+  const criticalCount = systemKPIs?.criticalComponents ?? components.filter(c => c.status === 'critical').length;
   const warningCount = components.filter(c => c.status === 'warning').length;
   const optimalCount = components.filter(c => c.status === 'optimal').length;
 
@@ -21,16 +24,16 @@ export default function HealthOverview() {
   const cards = [
     {
       title: 'Structural Health',
-      value: `${healthScore}%`,
-      subtitle: 'Global system health index',
+      value: `${healthScore.toFixed(0)}%`,
+      subtitle: 'AI-computed health index',
       icon: Shield,
       color: healthScore > 70 ? 'text-emerald-400' : healthScore > 40 ? 'text-amber-400' : 'text-red-400',
       bgColor: healthScore > 70 ? 'from-emerald-500/10' : healthScore > 40 ? 'from-amber-500/10' : 'from-red-500/10',
     },
     {
-      title: 'Avg. Fatigue',
+      title: 'Avg. Fatigue (Miner)',
       value: `${(avgFatigue * 100).toFixed(1)}%`,
-      subtitle: 'Miner damage accumulation',
+      subtitle: 'D = Σ(ni/Ni) - AI computed',
       icon: TrendingDown,
       color: avgFatigue < 0.4 ? 'text-emerald-400' : avgFatigue < 0.7 ? 'text-amber-400' : 'text-red-400',
       bgColor: 'from-blue-500/10',
@@ -38,7 +41,7 @@ export default function HealthOverview() {
     {
       title: 'Failure Probability',
       value: `${(avgFailureProb * 100).toFixed(1)}%`,
-      subtitle: 'Weibull distribution model',
+      subtitle: 'Weibull: F(t) = 1-exp(-(t/η)^β)',
       icon: Zap,
       color: avgFailureProb < 0.3 ? 'text-emerald-400' : avgFailureProb < 0.5 ? 'text-amber-400' : 'text-red-400',
       bgColor: 'from-purple-500/10',
@@ -52,12 +55,12 @@ export default function HealthOverview() {
       bgColor: 'from-orange-500/10',
     },
     {
-      title: 'Components Status',
-      value: `${optimalCount}/${components.length}`,
-      subtitle: `${warningCount} warnings, ${criticalCount} critical`,
-      icon: Activity,
-      color: 'text-blue-400',
-      bgColor: 'from-cyan-500/10',
+      title: 'AI Anomalies',
+      value: `${systemKPIs?.totalAnomalies ?? 0}`,
+      subtitle: 'Isolation Forest + Z-score',
+      icon: Brain,
+      color: 'text-purple-400',
+      bgColor: 'from-violet-500/10',
     },
     {
       title: 'Next Maintenance',
